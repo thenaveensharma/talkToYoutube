@@ -8,22 +8,33 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
 from dotenv import load_dotenv
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import (
+    RunnableParallel,
+    RunnableLambda,
+    RunnablePassthrough,
+)
 
 load_dotenv()
 
 
-from sklearn.metrics.pairwise import cosine_similarity
+def text_join(transcript_list):
+    return " ".join([i.text for i in transcript_list.snippets])
+
+
+def format_doc(retrieved_docs):
+    return "\n\n".join(doc.page_content for doc in retrieved_docs)
 
 
 def main():
     # Indexing
-
+    parser = StrOutputParser()
     video_id = "wjZofJX0v4M"
+
     try:
         ytt_api = YouTubeTranscriptApi()
         transcript_list = ytt_api.fetch(video_id)
-
-        transcript = " ".join([i.text for i in transcript_list.snippets])
+        transcript = text_join(transcript_list)
 
     except (TranscriptsDisabled, VideoUnavailable):
         print("No caption available")
@@ -44,7 +55,12 @@ def main():
         search_type="similarity", search_kwargs={"k": 4}
     )
 
-    retrieved_docs = retriever.invoke("What initials GPT stands for?")
+    parallel_chain = RunnableParallel(
+        {
+            "context": retriever | RunnableLambda(format_doc),
+            "question": RunnablePassthrough(),
+        }
+    )
 
     # Augmentation
 
@@ -61,17 +77,14 @@ def main():
                           """,
         input_variables=["context", "question"],
     )
-    question = "Did he discussed about Nuclear weapon , if yes give detailed explanation"
 
-    context_text = "\n\n".join(doc.page_content for doc in retrieved_docs)
+    main_chain = parallel_chain | prompt | llm | parser
+    question = (
+        "Did he discussed about LLM , give 5 points but line should not exceed 15 words"
+    )
 
-    final_prompt = prompt.invoke({"context": context_text, "question": question})
-
-    res = llm.invoke(final_prompt)
-
-    print(res.content)
-
-    # Convert every step in langchain's chain
+    res = main_chain.invoke(question)
+    print(res)
 
 
 if __name__ == "__main__":
