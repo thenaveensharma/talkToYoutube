@@ -83,8 +83,10 @@ def main():
         "Did he discussed about LLM , give 5 points but line should not exceed 15 words"
     )
 
-    res = main_chain.invoke(question)
-    print(res)
+    # res = main_chain.invoke(question)
+    print(main_chain.get_graph().draw_ascii())
+
+    
 
 
 if __name__ == "__main__":
